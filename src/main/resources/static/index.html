@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>WebSocket Chat</title>
+
+</head>
+<body onload="connect(); showMessages()">
+<form>
+  <input type="text" id="name" placeholder="Name"> <button id="userOk" type="button">ok</button>
+  <br/>
+  <input type="text" id="message" placeholder="Message">
+  <input type="text" id="receiver" placeholder="Receiver">
+  <button type="button" onclick="sendMessage()">Send</button>
+  <hr/>
+</form>
+<br/>
+<h2>PUBLIC</h2>
+<div id="chat"></div>
+<hr/>
+<br/>
+<h2>PRIVATE</h2>
+<div id="chat2"></div>
+<hr/>
+<br/>
+
+
+
+</body>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="/webjars/sockjs-client/1.1.2/sockjs.min.js"></script>
+<script src="/webjars/stomp-websocket/2.3.3/stomp.min.js"></script>
+<script th:inline="javascript">
+
+  var stompClient = null;
+
+
+
+  // Инициализация SockJS
+  function connect(){
+    var socket = new SockJS('/chat');
+    stompClient = Stomp.over(socket);
+  }
+
+
+
+  // При нажатий на кнопку "ok"
+  $('#userOk').click(() => {
+    var name = $('#name').val();
+    showPrivateMessages(name)
+  });
+  function showPrivateMessages(name){
+    stompClient.subscribe(getEndpoint(name), function (message) {
+      message = message.body;
+      console.log('name:' + message.senderName + ' message:' + message.content);
+      showMessage2(JSON.parse(message));
+    });
+  }
+
+  // подписка на публичный брокер
+  function showMessages() {
+
+    stompClient.connect({}, function () {
+
+      console.log('Connected !');
+
+      stompClient.subscribe('/broker/toSendMessage', function (message) {
+        message = message.body;
+        console.log('name:' + message.senderName + ' message:' + message.content);
+        showMessage(JSON.parse(message));
+      });
+
+    });
+
+
+  }
+
+  function showMessage(message) {
+    console.log('showMessage(message) message -> ' + message)
+    $("#chat").append("<p><strong>" + message.senderName + ":</strong> " + message.content + "</p>");
+  }
+
+  function showMessage2(message) {
+    console.log('showMessage2(message) message -> ' + message)
+    $("#chat2").append("<p><strong>" + message.senderName + ":</strong> " + message.content + "</p>");
+  }
+
+  function getEndpoint(name){
+    return `/broker/${name}/queue/private`;
+  }
+
+  function sendMessage() {
+    var name = $("#name").val();
+    var message = $("#message").val();
+    var receiver = $("#receiver").val();
+    if(!receiver) {
+      stompClient.send("/prefix/getMessage", {}, JSON.stringify(
+              {
+                'senderName': name,
+                'content': message,
+                'receiverName': 'none',
+                'type': 'PUBLIC'
+              }
+      ));
+    } else {
+      stompClient.send("/prefix/getMessageForOne", {}, JSON.stringify(
+              {
+                'senderName': name,
+                'content': message,
+                'receiverName': receiver,
+                'type': 'PRIVATE'
+              }
+      ));
+    }
+    $("#name").val("");
+    $("#message").val("");
+    $("#receiver").val("")
+  }
+
+</script>
+</html>
